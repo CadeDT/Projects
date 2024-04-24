@@ -1,58 +1,98 @@
 #include <msp430.h> 
-unsigned int adc_rawp, adc_rawx, adc_rawy, value, volt, voltp, voltx, volty;
+#include <math.h>
+unsigned int c_c, timer, adc_raw, adc_rawp, adc_rawx, adc_rawy, value, volt, voltp, voltx, volty, num, Nvolt, steady_s, clk;
 void LCD_command(unsigned char);
 void LCD_write(unsigned char);
 void LCD_init(void);
-
+void play(int,int);
+void UCA0_UART_TX_data(unsigned char);
 
 int main(void)
 {
 	WDTCTL = WDTPW | WDTHOLD;	// stop watchdog timer
-	
-///Name	
-	/**	    LCD_write('C');
-	        LCD_write('A');
-	        LCD_write('D');
-	        LCD_write('E');
+	PM5CTL0 &= ~LOCKLPM5; //clear LOCKPM5 bit
 
-	        LCD_write(' ');
+	//setup up PWM
+	P1DIR |= (BIT0|BIT2|BIT3);
+	P4DIR |= BIT7;
+	P4OUT |= BIT7;
+	P1SEL1 &=~ (BIT2|BIT3);
+	P1SEL0 |= (BIT2|BIT3);
+	TA1CTL = TASSEL_2 | MC_1 | TACLR;
+	TA1CCR0 = 2000;
+	TA1CCR1 = 2000;
+	TA1CCTL1 = OUTMOD_7;
+	TA1CCR2 = 2000;
 
-	        LCD_write('D');
-	        LCD_write('O');
-	        LCD_write('D');
-	        LCD_write('D');
+	//button setting
+	P7DIR |= BIT0;
+	P6DIR |= BIT0 | BIT1;
+	P5DIR &= (BIT0|BIT1|BIT2);
 
-	        LCD_command(0xC0);
+	//LCD SETUP
+	P3DIR |= 0xFF;
+	P3OUT |= 0x0E;
+	P8DIR |= 0x0E; //output direction (P8)
+	P8OUT &= ~0x0E;
+	LCD_init();
 
-	        LCD_write('0'+(num/1000));
-	        LCD_write('0'+((num/100)%10));
-	        LCD_write('0'+((num/10)%10));
-	        LCD_write('0'+(num%10));
-*\
+	//accelerometer stuff/joystick setup
+	P4SEL0 |= 0x0E;
+	P4SEL1 |= 0x0E;
 
-/**      if((P5IN&BIT0) == 0){play(//c, fc//);} //Button 7
-	     if((P5IN&BIT1) == 0){play(//d, fd//);}//Button 8
-	     if((P5IN&BIT2) == 0){play(//e, fe//);}//Button 9
+	ADC12CTL0 = ADC12SHT0_6 | ADC12MSC | ADC12ON;
+	ADC12CTL1 = ADC12SHP | ADC12CONSEQ_1;
+	ADC12CTL2 = ADC12RES_2;
+	ADC12MCTL0 = ADC12INCH_9;
+	ADC12MCTL1 = ADC12INCH_10;
+	ADC12MCTL2 = ADC12INCH_11|ADC12EOS;//Stick done
 
-	     P6OUT ^= BIT1
-	     P6OUT |=BIT0;
+	// Servo setup
+	P1DIR |=BIT0;
+	P1SEL1 &=~BIT0;
+	P1SEL0 |=BIT0;
+	TA0CTL =TASSEL_2|MC_1|TACLR;
+	TA0CCR0 =20000;
+	TA0CCR1 =1250;
+	TA0CCTL1 = OUTMOD_7;
 
-	     if((P5IN&BIT0) == 0){play(//f, ff)//;}//Button *
-	     if((P5IN&BIT1) == 0){play(//g, fg);}//Button 0
-	     if((P5IN&BIT2) == 0){}//Button #	        
-	        */
-///Button 7 
-/**
-   ADC12CTL0 |= ADC12ENC | ADC12SC;
-            while((ADC12IFGR0 & BIT0) ==0);
-            adc_rawp =ADC12MEM0;
-            adc_rawx =ADC12MEM1;
-            adc_rawy =ADC12MEM2;
+	//UART SETUP
+	UCA0CTLW0 = UCSWRST;
+	UCA0CTLW0 |= UCSSEL_2;
+	UCA0BRW =6;
+	UCA0MCTLW= UCOS16 | (8<<4) | (32<<8);
+	P2SEL1 |= BIT0|BIT1;
+	P2SEL0 &=~(BIT0|BIT1);
+	UCA0CTLW0 &=~UCSWRST;
+
+	__delay_cycles(200);                            
+	c_c = 0; ///clock counter
+	steady_s = 7;//set steady
+
+	int c,d,e,f,g, fc,fd,ff,fe,fg;
+	c= 1911; //HOW LONG TO PLAY
+	d= 1703;
+	e= 1516;
+	f= 1432;
+	g= 1276;
+
+	fc= 262;//BUTTON FREQUENCIES
+	fd= 294;
+	fe= 330;
+	ff= 349;
+	fg= 392;
+
+///Name///
+	    while(1){
+	        ADC12CTL0 |= ADC12ENC | ADC12SC;
+	        while((ADC12IFGR0 & BIT0) ==0);
+            adc_rawp =ADC12MEM2;
+            adc_rawx =ADC12MEM0;
+            adc_rawy =ADC12MEM1;
             voltp = ((unsigned long)adc_rawp*3300)/(4095);
             voltx = ((unsigned long)adc_rawx*3300)/(4095);
             volty = ((unsigned long)adc_rawy*3300)/(4095);
 
-///Button 8 /**
             LCD_command(0x01);  //clear the thing
             LCD_write(' ');
             LCD_write(' ');
@@ -60,141 +100,201 @@ int main(void)
             LCD_write(' ');
             LCD_write(' ');
             LCD_write(' ');
-            LCD_write('P');
-            LCD_write(':');
-            LCD_write('0'+ voltp/1000 % 10);
-            LCD_write('.');
-            LCD_write('0'+ voltp/100 % 10);
-            LCD_write('0'+ voltp/10 % 10);
-            LCD_write('0'+ voltp % 10);
- */
-///Button 9 
- /**           LCD_write('X');
-            LCD_write(':');
-            LCD_write('0'+ voltx/1000 % 10);
-            LCD_write('.');
-            LCD_write('0'+ voltx/100 % 10);
-            LCD_write('0'+ voltx/10 % 10);
-            LCD_write('0'+ voltx % 10);
+            LCD_write('C');
+            LCD_write('A');
+            LCD_write('D');
+            LCD_write('E');
 
             LCD_write(' ');
 
-            LCD_write('Y');
-            LCD_write(':');
-            LCD_write('0'+ volty/1000 % 10);
-            LCD_write('.');
-            LCD_write('0'+ volty/100 % 10);
-            LCD_write('0'+ volty/10 % 10);
-            LCD_write('0'+ volty % 10);
- */
-///Button *
-/**
-	void play(note, freq){
-	        volatile int counter = 0;
-	        while (counter<freq){
-	           TA1CCR0 = note;
-	           if((TA1CCTl0&CCIFG)!=0){
-	               P7OUT ^= BIT0;
-	               TA1CCTL0 &=~ CCIFG;
-	               counter++;
-	           }
-	        }
-	         TA1CCR0 = 0;
-	         counter = 0;
-	         while(counter<10){
-	             counter++;
-	         }
+            LCD_write('D');
+            LCD_write('O');
+            LCD_write('D');
+            LCD_write('D');
+
+	    ///steady state check variables///
+	    if (steady_s==7){ // BUTTON 7 TIMER                                          
+	        LCD_command(0xC0);  //clear the thing
+	        LCD_write('0'+ clk/600);
+	        LCD_write('0'+ clk/60 % 10);
+	        LCD_write(':');
+	        LCD_write('0'+ (clk % 60)/10 % 10);
+	        LCD_write('0'+ clk % 10);
+
+	       }
+	    else if (steady_s==8){ // BUTTON 8 TIMER
+	        LCD_command(0xC0);  //clear the thing
+	        LCD_write('A');
+	        LCD_write(':');
+	        LCD_write('0'+ voltp/1000 % 10);
+	        LCD_write('.');
+	        LCD_write('0'+ voltp/100 % 10);
+	        LCD_write('0'+ voltp/10 % 10);
+	        LCD_write('0'+ voltp % 10);
+	    }
+	    else if (steady_s==9){ // BUTTON 9 TIMER
+	        LCD_command(0xC0);
+	        LCD_write('X');
+	        LCD_write(':');
+	        LCD_write('0'+ voltx/1000 % 10);
+	        LCD_write('.');
+	        LCD_write('0'+ voltx/100 % 10);
+	        LCD_write('0'+ voltx/10 % 10);
+	        LCD_write('0'+ voltx % 10);
+
+	        LCD_write(' ');
+
+	        LCD_write('Y');
+	        LCD_write(':');
+	        LCD_write('0'+ volty/1000 % 10);
+	        LCD_write('.');
+	        LCD_write('0'+ volty/100 % 10);
+	        LCD_write('0'+ volty/10 % 10);
+	        LCD_write('0'+ volty % 10);
 	    }
 
-	    int c,d,e,f,g, fc,fd,ff,fe,fg;
-	        c= 1911
-	        d= 1703
-	        e= 1516
-	        f= 1432
-	        g= 1276
+	    P6OUT |= BIT1;
+        if ((P5IN & BIT0)==0){ // BUTTON 7 TIMER
+            steady_s = 7;
+        }
 
-	        fc= 262
-	        fd= 294
-	        fe= 330
-	        ff= 349
-	        fg=392
-*/	
-///Button 0
-	///Add one minute to digital clock
+        else if ((P5IN & BIT1)==0){// BUTTON 8
+            steady_s = 8;
+        }
 
-	
-	
-///Button #
-	///Clear minutes and seconds of the clock setting it to 00:00
-	
-	
-	
-	
-	
-	
-//Writing to the LCD [Lab 05]/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	      //Digital clock [Lab 5?]
-	WDTCTL = WDTPW | WDTHOLD; //hold watchdog timer
-	    PM5CTL0 &= ~LOCKLPM5; //clear LOCKPM5 bit
-	    P3DIR |= 0xFF;
-	    P3OUT &= ~0xFF;
-	    P8DIR |= 0x0E; //output direction (P8)
-	    P8OUT &= ~0x0E;
-	    ADC12CTL0 = ADC12SHT0_6 | ADC12MSC | ADC12ON;
-	    ADC12CTL1 = ADC12SHP | ADC12CONSEQ_1;
+        else if ((P5IN & BIT2)==0){// BUTTON 9
+            steady_s = 9;
+        }
 
-	    LCD_init(); //LCD init
+        P6OUT &= ~BIT1; /// turn off P6OUT for BIT1
+        P6OUT |= BIT0;
 
-	    while(1){
-	        ADC12CTL0 |= ADC12ENC | ADC125C;
-	        while((ADC12IFGR0 & BIT0) ==0);
-	            unsigned adc_raw =ADC12MEM0
+        if ((P5IN & BIT0)==0)// BUTTON *                                                                 
+        { ///PLAY FUNCTIONS
 
-	            LCD_write('C');
-	            LCD_write('A');
-	            LCD_write('D');
-	            LCD_write('E');
+          //first measure///
+          play(c,fc*2);
+          play(d,fd);
+          play(e,fe);
 
-	            LCD_write(' ');
+          ///second measure///
+          play(d,fd);
+          play(f,ff);
+          play(e,fe);
+          play(d,fd*1.5);
 
-	            LCD_write('D');
-	            LCD_write('O');
-	            LCD_write('D');
-	            LCD_write('D');
+          ///third measure///
+          play(c,fc*4);
+        }
+        else if ((P5IN & BIT1)==0)// BUTTON 0
+        {
+          clk += 60;
+        }
+        else if ((P5IN & BIT2)==0)// BUTTON #
+        {
+            clk = 0;
+        }
+        P6OUT &= ~BIT0; /// turn off P6OUT
 
-	            LCD_command(0xC0);
+        //UART setup///
+        UCA0_UART_TX_data('0'+clk/600);
+        UCA0_UART_TX_data('0'+clk/60 % 10);
+        UCA0_UART_TX_data(',');
+        UCA0_UART_TX_data('0'+ (clk%60)/10 % 10);
+        UCA0_UART_TX_data('0'+ clk % 10);
+        UCA0_UART_TX_data(',');
+        UCA0_UART_TX_data('0'+ adc_rawx/1000 % 10);
+        UCA0_UART_TX_data('0'+ adc_rawx/100 % 10);
+        UCA0_UART_TX_data('0'+ adc_rawx/10 % 10);
+        UCA0_UART_TX_data('0'+ adc_rawx % 10);
+        UCA0_UART_TX_data(',');
+        UCA0_UART_TX_data('0'+ adc_rawy/1000 % 10);
+        UCA0_UART_TX_data('0'+ adc_rawy/100 % 10);
+        UCA0_UART_TX_data('0'+ adc_rawy/10 % 10);
+        UCA0_UART_TX_data('0'+ adc_rawy % 10);
+        UCA0_UART_TX_data(',');
+        UCA0_UART_TX_data('0'+ adc_rawp/1000 % 10);
+        UCA0_UART_TX_data('0'+ adc_rawp/100 % 10);
+        UCA0_UART_TX_data('0'+ adc_rawp/10 % 10);
+        UCA0_UART_TX_data('0'+ adc_rawp % 10);
+        UCA0_UART_TX_data('\r');
+        UCA0_UART_TX_data('\n');
 
-	            LCD_write('0'+(num/1000));
-	            LCD_write('0'+((num/100)%10));
-	            LCD_write('0'+((num/10)%10));
-	            LCD_write('0'+(num%10));
+        ///DC motor///SETTING THE SPEED OF THE dc MOTOR //OUTMOD_# HOW THE PWM ////                    
+	    if(volty<1600){//
+	        TA1CCTL1 = OUTMOD_1;
+	        TA1CCTL2 = OUTMOD_7;
+	        TA1CCR2 = round(125 + (volty * (1875/1500))); //HOW FAST THE OUTMOD IS GOING  //GOING UP TO 2000
+	    }
+	    else if (volty < 1700){//midpoint
+	        TA1CCTL1 = OUTMOD_1;
+	        TA1CCTL2 = OUTMOD_1;
+	    }
+	    else{
+	        TA1CCTL1 = OUTMOD_7;   ///
+	        TA1CCTL2 = OUTMOD_1;   ///
+	        TA1CCR1 = round(2000 - ((volty-1600) * (1875/1500))); //FROM TOP TO BOTTOM, GOING TO 125
+	    }
+        //servo///                                                                                     
+	    TA0CCR1 = round(1250 +(voltx/19*3)); //voltx = 3200 or 3300 (1000?)                   
 
-	    while(1){
-	        __no_operation();
-	        }
+
+	    __delay_cycles(250000);  ///end of code (work as timer)///                                      
+
+	    ///Clock
+	    if (clk>3598){clk=0;} ///resets clock after 60 min 3598
+
+	    c_c++; //every time code runs set to occur ever so often a second
+	    if (c_c > 3){ //
+            clk++;
+            c_c=0;   ///resets the counter
+        }
+
+	    }
 	        return 0;
-	    }
+	}
+////end of main void
+    void UCA0_UART_TX_data(unsigned char c){
+        UCA0IFG &=~UCTXIFG;
+        UCA0TXBUF =c;
+        while((UCA0IFG & UCTXIFG)==0);
+    }
 
-	    }
-
-	    void LCD_command(usigned char in){
+    void play(note, freq){
+        volatile int counter = 0;
+        while (counter<freq){
+            TA1CCR0 = note;
+            if((TA1CCTL0 & CCIFG)!=0){
+                P7OUT ^= BIT0;
+                TA1CCTL0 &=~ CCIFG;
+                counter++;
+            }
+        }
+        TA1CCR0 = 0;
+        counter = 0;
+        while(counter<10){
+            counter++;
+        }
+        P7OUT &=~ BIT0;  /// TURN OFF NOISE 8///
+        TA1CCR0 = 2000;  /// SET TC1CCR0 BACK TO ORIGINAL VALUE ///
+    }
+	    void LCD_command(unsigned char in){
 	        P3OUT = in;
 	        P8OUT &= ~BIT3; //clear RS
 	        P8OUT &= ~BIT2; //clear R/W
 	        P8OUT |= BIT1; //set E
-	        __delay_cylces(200);
+	        __delay_cycles(200);
 	        P8OUT &= ~BIT1; //clear E
 	    }
 
 	    void LCD_write(unsigned char in){
 	        P3OUT = in;
-	        P8OUT &= ~BIT3; //clear RS
+	        P8OUT |= BIT3; //clear RS
 	        P8OUT &= ~BIT2; //clear R/W
 	        P8OUT |= BIT1; //set E
-	        __delay_cylces(200);
+	        __delay_cycles(200);
 	        P8OUT &= ~BIT1; //clear E
 	    }
-
 	    void LCD_init(){
 	        P8OUT &= ~BIT1;
 	        __delay_cycles(15000);
@@ -211,315 +311,3 @@ int main(void)
 	        LCD_command(0x01);
 	        __delay_cycles(3000);
 	        }
-
-//Joy stick controls y-axis; control the speed and direction of a DC motor [Lab 06/Lab 07]/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	WDTCTL = WDTPW | WDTHOLD; //hold watchdog timer
-	    PM5CTL0 &= ~LOCKLPM5; //clear LOCKPM5 bit
-	                    ///P1DIR |=BIT0    pin 1.0
-	                    ///P4DIR |=BIT3  UART?
-	    P3DIR |= 0xFF;
-	    P4SEL0 |= 0x0E;  ///0x03  ADC STICK set up
-	    P4SEL1 |= 0x0E;  ///0x03
-	    P5DIR &= ~0x01;
-	    P5REN |= 0x01;
-	    P6DIR |= 0x07;
-	    P8DIR |= 0x0E; //output direction (P8)
-	    P8OUT &= ~0x0E;
-
-	    LCD_init(); 
-
-	    ADC12CTL0 = ADC12SHT0_6 | ADC12MSC | ADC12ON;
-	    ADC12CTL1 = ADC12SHP|ADC12CONSEQ_1;
-	    ADC12CTL2 = ADC12RES_2;
-	    ADC12MCTL0 = ADC12INCH_9;
-	    ADC12MCTL1 = ADC12INCH_10;
-	    ADC12MCTL2 = ADC12INCH_11|ADC12EOS;
-
-	    while(1){
-	        ADC12CTL0 |= ADC12ENC | ADC12SC;
-	        while((ADC12IFGR0 & BIT0) ==0);
-	        adc_rawp =ADC12MEM0;
-	        adc_rawx =ADC12MEM1;
-	        adc_rawy =ADC12MEM2;
-	        voltp = ((unsigned long)adc_rawp*3300)/(4095);
-	        voltx = ((unsigned long)adc_rawx*3300)/(4095);
-	        volty = ((unsigned long)adc_rawy*3300)/(4095);
-	        
-	            LCD_command(0x01);  //clear the thing
-	            LCD_write(' ');
-	            LCD_write(' ');
-	            LCD_write(' ');
-	            LCD_write(' ');
-	            LCD_write(' ');
-	            LCD_write(' ');
-	            LCD_write('P');
-	            LCD_write(':');
-	            LCD_write('0'+ voltp/1000 % 10);
-	            LCD_write('.');
-	            LCD_write('0'+ voltp/100 % 10);
-	            LCD_write('0'+ voltp/10 % 10);
-	            LCD_write('0'+ voltp % 10);
-
-	            LCD_command(0xC0);
-
-	            LCD_write('X');
-	            LCD_write(':');
-	            LCD_write('0'+ voltx/1000 % 10);
-	            LCD_write('.');
-	            LCD_write('0'+ voltx/100 % 10);
-	            LCD_write('0'+ voltx/10 % 10);
-	            LCD_write('0'+ voltx % 10);
-
-	            LCD_write(' ');
-
-	            LCD_write('Y');
-	            LCD_write(':');
-	            LCD_write('0'+ volty/1000 % 10);
-	            LCD_write('.');
-	            LCD_write('0'+ volty/100 % 10);
-	            LCD_write('0'+ volty/10 % 10);
-	            LCD_write('0'+ volty % 10);
-
-
-
-	            __delay_cycles(250000);
-	            if(voltx<10){
-	                P6OUT = 0x01;
-	            }
-	            else if (voltx>3000){
-	                P6OUT= 0x05;
-	           }
-	            else if(volty<10){
-	                P6OUT = 0x06;
-	           }
-	            else if (volty>3000){
-	                P6OUT = 0x03;
-	           }
-	            else if((P5IN&BIT0)==0x00){
-	                P6OUT = 0x00;
-	            }
-	            else{
-	                P6OUT = 0x07;
-	            }
-
-
-	    }
-
-	    while(1){
-	        __no_operation();
-	        }
-	        return 0;
-
-	        void LCD_command(unsigned char in){
-	                P3OUT = in;
-	                P8OUT &= ~BIT3; //clear RS
-	                P8OUT &= ~BIT2; //clear R/W
-	                P8OUT |= BIT1; //set E
-	                __delay_cycles(200);
-	                P8OUT &= ~BIT1; //clear E
-	            }
-
-	            void LCD_write(unsigned char in){
-	                P3OUT = in;
-	                P8OUT |= BIT3; //clear RS
-	                P8OUT &= ~BIT2; //clear R/W
-	                P8OUT |= BIT1; //set E
-	                __delay_cycles(200);
-	                P8OUT &= ~BIT1; //clear E
-	            }
-
-	            void LCD_init(){
-	                P8OUT &= ~BIT1;
-	                __delay_cycles(15000);
-	                LCD_command(0x30);
-	                __delay_cycles(300);
-	                LCD_command(0x30);
-	                __delay_cycles(300);
-	                LCD_command(0x30);
-	                __delay_cycles(300);
-	                LCD_command(0x38);
-	                LCD_command(0x10);
-	                LCD_command(0x0F);
-	                LCD_command(0x06);
-	                LCD_command(0x01);
-	                __delay_cycles(3000);
-	                }
-
-
-
-
-//joy stick controls x-axis; control the angualr position to the servo motor [Lab 06/Lab 07]/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-	WDTCTL = WDTPW | WDTHOLD;   // stop watchdog timer
-	    PM5CTL0 &= ~LOCKLPM5;
-	    P1DIR |= 0x02;  
-	    P1DIR |= BIT2 | BIT3;
-	    P4DIR |= BIT7; //GPIO for pin 4
-	    P4DIR |= 0x02;
-	    P4OUT |= BIT7; //setting the output direction for P4.7
-	    P6DIR &= ~(BIT0 | BIT1); //left or right
-	    P7DIR &= ~(BIT0 | BIT1); //up or down
-	    P1SEL1 &= ~(BIT2 | BIT3); //alternate function (TA1.1, TA1.2)
-	    P1SEL0 |= ~(BIT2 | BIT3); //alternate function (TA1.1, TA1.2)
-	    ADC12CTL0 = ADC12SHT0_6 | ADC12ON;
-	    ADC12CTL1 = ADC12SHP ;
-	    P4SEL1 |= BIT1; //alternate function (A9, A10, A11)
-	    P4SEL0 |= BIT1; //alternate function (A9, A10, A11)
-
-	    ADC12CTL2 |= ADC12RES_2;
-	    ADC12MCTL0 = ADC12INCH_9;
-
-	    TA1CTL = TASSEL_2 | MC_1 | TACLR;
-	    TA1CCR0 = 2000;
-	    TA1CCR2 = 2000;
-	    TA1CCR1 = 2000;
-	    TA1CCTL1 = OUTMOD_7;
-
-        while(1){
-            ADC12CTL0 |= ADC12ENC | ADC12SC;
-	        while((ADC12IFGR0 & BIT0)==0){
-	            adc_raw = ADC12MEM0;
-	            P4OUT ^=0x02;
-	            __delay_cycles(250000);
-	            }
-	        if((P6IN & BIT0) == 0){ //left button pressed (forward)
-	            TA1CCR2 = 2000;
-	            TA1CCR1 = 500;
-	        }
-
-	        if(adc_raw>2500){
-	            TA1CCR1 = 500;
-	        }
-	        else{
-	            TA1CCR1 = 1000;
-	        }
-	     }
-	                  else if ((P6IN & BIT1) == 0){ //right button pressed
-	                      TA1CCR2 = 500;
-	                              TA1CCR1 = 2000;
-	                      //state = 2;
-	                      if(adc_raw>2500){
-	                           TA1CCR2 = 500;
-	                      }else{
-	                           TA1CCR2 = 1000;
-	                      }
-	                  }
-	                  else if ((P7IN & BIT0) == 0){ //Up button is pressed
-	                      TA1CCTL1 = OUTMOD_1;  //PWM (slow decay)
-	                      TA1CCTL2= OUTMOD_1;
-	                      //state = 3;
-	                  }
-	                    else if ((P7IN & BIT1) == 0){ //Up button is pressed
-	                        TA1CCTL1 = OUTMOD_5;  //PWM (slow decay)
-	                        TA1CCTL2 = OUTMOD_5;
-	                          //state = 3;
-	                  }
-	                    else{
-	                        if(adc_raw>2500){
-	                           TA1CCR2 = 500;
-	                        }
-	                        else{
-	                            TA1CCR2 = 1000;
-	                        }
-	                        if(adc_raw>2500){
-	                            TA1CCR1 = 500;
-	                        }
-	                         else{
-	                            TA1CCR1 = 1000;
-	                     }
-	                 }
-	                 P1OUT ^=BIT0;
-	                }
-
-//pressing 3 KEYS [Lab 4]/////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-void play(note, freq){
-	    volatile int counter = 0;
-	    while (counter<freq){
-	       TA1CCR0 = note;
-	       if((TA1CCTl0&CCIFG)!=0){
-	           P7OUT ^= BIT0;
-	           TA1CCTL0 &=~ CCIFG;
-	           counter++;
-	       }
-	    }
-	     TA1CCR0 = 0;
-	     counter = 0;
-	     while(counter<10){
-	         counter++;
-	     }
-	}
-
-	int c,d,e,f,g, fc,fd,ff,fe,fg;
-	    c= 1911
-	    d= 1703
-	    e= 1516
-	    f= 1432
-	    g= 1276
-
-	    fc= 262
-	    fd= 294
-	    fe= 330
-	    ff= 349
-	    fg=392
- // 7, 8, 9, *, #
-	WDTCTL = WDTPW | WDTHOLD;
-	PM5CTL0 &= ~LOCKLPM5;
-	P7DIR |= BIT0;
-	TA1CCR0 = 1000;
-	TA1CTL = TASSEL_2 |MC_1|TACLR;
-
-	while (1){
-	    P6OUT ^= BIT0
-	    if((P5IN&BIT0) == 0){
-	        play(//c, fc//);
-	    } //Button 7
-	    if((P5IN&BIT1) == 0){
-	        play(//d, fd//);
-	    }//Button 8
-	    if((P5IN&BIT2) == 0){
-	            play(//e, fe//);
-	        }//Button 9
-
-	    P6OUT ^= BIT1
-	    P6OUT |=BIT0;
-
-	    if((P5IN&BIT0) == 0){
-	            play(//f, ff)//;
-	    }//Button *
-	    if((P5IN&BIT1) == 0){
-	            play(//g, fg);
-	    }//Button 0
-	    if((P5IN&BIT2) == 0){
-
-	    }//Button #
-
-
-	    play (e, fe);
-	    play (e, fe);
-	    play (f, ff);
-	    play (g, fg);
-
-	    play (g, fg);
-	    play (f, ff);
-	    play (e, fe);
-	    play (d, fd);
-
-	    play (c, fc);
-	    play (c, fc);
-	    play (d, fd);
-	    play (e, fe);
-
-	    play (e, fe);
-	    play (d, fd);
-	    play (d, 2*fd);
-	    P6OUT &= ~BIT1;
-	}
-
-//UART channel send data with a reasonable rate between 0.5sec ~ 1sec. With a baudrate of about 9600 bps
-
-
-
-
-
-
-	return 0;
-}
